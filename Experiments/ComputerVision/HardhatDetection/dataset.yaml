@@ -1,0 +1,11 @@
+train: ../dataset/images/train
+val: ../dataset/images/validation
+test: ../dataset/images/test
+
+# Number of classes
+nc: 2
+
+# Class names
+names:
+  0: hardhat
+  1: no-hardhat
