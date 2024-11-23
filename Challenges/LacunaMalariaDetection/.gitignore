@@ -1,0 +1,4 @@
+.augment-env
+./datasets/*
+./runs
+./images
