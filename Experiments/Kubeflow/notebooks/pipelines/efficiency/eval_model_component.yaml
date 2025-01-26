@@ -1,0 +1,63 @@
+name: Eval model
+inputs:
+- {name: input_model, type: Model}
+- {name: input_history, type: Artifact}
+- {name: input_test_x, type: Dataset}
+- {name: input_test_y, type: Artifact}
+outputs:
+- {name: MLPipeline_Metrics, type: Metrics}
+implementation:
+  container:
+    image: python:3.7
+    command:
+    - sh
+    - -c
+    - |2
+
+      if ! [ -x "$(command -v pip)" ]; then
+          python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip
+      fi
+
+      PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'tensorflow' 'pandas' 'kfp==1.8.22' && "$0" "$@"
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp -d)
+      printf "%s" "$0" > "$program_path/ephemeral_component.py"
+      python3 -m kfp.v2.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+    - |2+
+
+      import kfp
+      from kfp.v2 import dsl
+      from kfp.v2.dsl import *
+      from typing import *
+
+      def eval_model(input_model: Input[Model], input_history: Input[Artifact],
+                     input_test_x: Input[Dataset], input_test_y: Input[Artifact],
+                     MLPipeline_Metrics: Output[Metrics]):
+          import pandas as pd
+          import tensorflow as tf
+          import pickle
+
+          model = tf.keras.models.load_model(input_model.path)
+
+          norm_test_X = pd.read_csv(input_test_x.path)
+
+          with open(input_test_y.path, "rb") as file:
+              test_Y = pickle.load(file)
+
+          # Test the model and print loss and mse for both outputs
+          loss, Y1_loss, Y2_loss, Y1_rmse, Y2_rmse = model.evaluate(x=norm_test_X, y=test_Y)
+          print("Loss = {}, Y1_loss = {}, Y1_mse = {}, Y2_loss = {}, Y2_mse = {}".format(loss, Y1_loss, Y1_rmse, Y2_loss, Y2_rmse))
+
+          MLPipeline_Metrics.log_metric("loss", loss)
+          MLPipeline_Metrics.log_metric("Y1_loss", Y1_loss)
+          MLPipeline_Metrics.log_metric("Y2_loss", Y2_loss)
+          MLPipeline_Metrics.log_metric("Y1_rmse", Y1_rmse)
+          MLPipeline_Metrics.log_metric("Y2_rmse", Y2_rmse)
+
+    args:
+    - --executor_input
+    - {executorInput: null}
+    - --function_to_execute
+    - eval_model
